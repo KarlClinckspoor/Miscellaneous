@@ -1,181 +1,106 @@
-#%%
+# encoding = 'utf-8'
+# Written for my friend Lia, to save her a few hours, and her insanity, from having to treat the AFM data.
+
 import matplotlib.pyplot as plt
 import numpy as np
 import glob
-#%%
-def find_nearest(array,value):
-    idx = (np.abs(array-value)).argmin()
-    return idx, array[idx]
 
-#%%
-def trim_files():
+
+def rewrite_files():
+    """Finds all the .txt files in the directory and rewrites them in a more straightforward way for what is \
+    interesting in this script."""
     names = glob.glob('*.txt')
     for name in names:
-        fhand = open(name,'r')
-        dest = name[:-4]+'_int.txt'
-        fdest = open(dest,'w')
+        with open(name, 'r') as fsource:
+            with open((name[:-4] + '_int.txt'), 'w') as fdest:
+                for line in fsource:
+                    line = line.split('\t')
+                    if len(line) < 3:
+                        continue
+                    x = line[3]
+                    y = line[2]
+                    interest = x + ' ' + y + '\n'
+                    fdest.write(interest)
+
+
+#
+def trim_files():
+    """Deprecated. The function rewrite_files is better."""
+    names = glob.glob('*.txt')
+    for name in names:
+        fhand = open(name, 'r')
+        dest = name[:-4] + '_int.txt'
+        fdest = open(dest, 'w')
         
         for line in fhand:
-            linha = line.split('\t')
-            if len(linha) < 3:
+            line = line.split('\t')
+            if len(line) < 3:
                 continue
-            x = linha[3]
-            y = linha[2]
+            x = line[3]
+            y = line[2]
             dado = x + ' ' + y + '\n'
             fdest.write(dado)
         
         fdest.close()
         fhand.close()
-#%%
-def find_deltay(fname):
-    dados = np.loadtxt(fname,delimiter=' ', skiprows=2)
-    dados_x = dados[:,0]
-    dados_y = dados[:,1]
+
+
+# todo: rewrite this to use pandas dataframes if better.
+def find_delta_y(fname):
+    """Finds the delta Y, or the adhesion force, by finding the minimum of the dataset and then finding the \
+    first point where the curve becomes linear."""
+    dados = np.loadtxt(fname, delimiter=' ', skiprows=2)  # requires a properly formatted file.
+    dados_x = dados[:, 0]
+    dados_y = dados[:, 1]
     
-    plt.plot(dados_x,dados_y)
+    plt.plot(dados_x, dados_y)
     plt.title(fname)
-    name = fname+'.png'
-    plt.savefig(name,dpi=150)
-    #plt.show()
+    name = fname + '.png'
+    plt.savefig(name, dpi=150)
     plt.clf()   
     
     minimo_y_val = min(dados_y)
     minimo_y_pos = dados_y.argmin()
-    #minimo_x_val = dados_x[minimo_y_pos]
-    #minimo_x_pos = minimo_y_pos
-    
-    
-    interesse = dados_y[minimo_y_pos:]
-    interesse_x = dados_x[minimo_y_pos:]
+    # minimo_x_val = dados_x[minimo_y_pos]
+    # minimo_x_pos = minimo_y_pos
+
+    # The region of interest if right after the minimum of the curve.
+    interest = dados_y[minimo_y_pos:]
+    interest_x = dados_x[minimo_y_pos:]
     '''
-    derivada_interesse = np.diff(interesse, n=1)
+    derivada_interesse = np.diff(interest, n=1)
     min_derivada = min(derivada_interesse)
     min_derivada_pos = derivada_interesse.argmin()
     
-    inflex_y_val = interesse[min_derivada_pos]
+    inflex_y_val = interest[min_derivada_pos]
     '''
     interesse_y_inflex_pos = 0
     interesse_y_inflex_value = 0
-    
-    for index, value in enumerate(interesse):
-        coef, residuals, rank,singular,rcond = np.polyfit(interesse_x[index:], interesse[index:], 1, full=True)
-        if len(residuals) == 0: continue
-        if residuals[0]<1:
+
+    # Now that the minimum is found, go through all the remaining points, starting at the minimum and going up,
+    # and fit them linearly. As soon as the fit becomes good (residuals < 1), stops and returns that point.
+    # [-------] -> [X------] -> [XX-----], where X are excluded points.
+    for index, value in enumerate(interest):
+        coef, residuals, rank, singular, rcond = np.polyfit(interest_x[index:], interest[index:], 1, full=True)
+        # Only residuals is of interest.
+        if len(residuals) == 0:
+            continue
+        if residuals[0] < 1:
             interesse_y_inflex_pos = index
             interesse_y_inflex_value = value
             break
-        #print(index, residuals)
+        # print(index, residuals)
     
-    #inflex_y_val = interesse[min_derivada_pos]
-    
-    #delta_y = inflex_y_val - minimo_y_val
-    #print(delta_y)
-    
-    delta_y_2 = interesse_y_inflex_value - minimo_y_val
-    return delta_y_2
-#delta_y = min_interesse - minimo_y_val
+    delta_y = interesse_y_inflex_value - minimo_y_val
+    return delta_y
 
-#interesse = dados_y[minimo_y_pos:]
 
-#%%
+# %%
 if __name__ == '__main__':
     trim_files()
     files = glob.glob('*int.txt')
-    fhand = open('resultados.txt','w')
-    for file in files:
-        delta_y = find_deltay(file)
-        text = file+' '+str(delta_y)+'\n'
-        fhand.write(text)
-    fhand.close()
-    
-#%%
-'''
-derivada = list()
-for index, value in enumerate(interesse):
-    dif_y = interesse[index+1]-interesse[index]
-    derivada.append(dif_y)
-    maximo_y = max(derivada)
-    maximo_x = interesse[]
-'''
-#%%
-
-'''
-fhand = open('dadoliadest.txt','r')
-x = list()
-y = list()
-for line in fhand:
-   
-    if count == 0:
-        continue
-    if count == 1:
-        continue
-    count += 1
- 
-    dado = line.split(' ')
-    try:
-        dado_x= float(dado[0])
-        dado_y= float(dado[1])
-    except:
-        dado_x = 0
-        dado_y = 0
-    x.append(dado_x)
-    y.append(dado_y)
-
-#print(x)
-#print(y)
-
-y_min = min(y)
-y_max = max(y[500:])
-
-print(y_min)
-print(y_max)
-
-plt.plot(x,y)
-
-plt.show()
-fhand.close()
-'''
-#%%
-
-#%%
-'''
-dados = np.loadtxt('dadoliadest.txt',delimiter=' ')
-dados_x = dados[:,0]
-dados_y = dados[:,1]
-#plt(dados_x,dados_y)
-minimo_y_val = min(dados_y)
-minimo_y_pos = dados_y.argmin()
-minimo_x_val = dados_x[minimo_y_pos]
-minimo_x_pos = minimo_y_pos
-
-
-interesse = dados_y[minimo_y_pos:]
-interesse_x = dados_x[minimo_y_pos:]
-'''
-'''
-derivada_interesse = np.diff(interesse, n=1)
-min_derivada = min(derivada_interesse)
-min_derivada_pos = derivada_interesse.argmin()
-
-inflex_y_val = interesse[min_derivada_pos]
-
-interesse_y_inflex_pos = 0
-interesse_y_inflex_value = 0
-'''
-'''
-for index, value in enumerate(interesse):
-    coef, residuals, rank,singular,rcond = np.polyfit(interesse_x[index:], interesse[index:], 1, full=True)
-    if len(residuals) == 0: continue
-    if residuals[0]<1:
-        interesse_y_inflex_pos = index
-        interesse_y_inflex_value = value
-        break
-    #print(index, residuals)
-
-#inflex_y_val = interesse[min_derivada_pos]
-
-delta_y = inflex_y_val - minimo_y_val
-print(delta_y)
-
-delta_y_2 = interesse_y_inflex_value - minimo_y_val
-'''
+    with open('resultados.txt', 'w') as fhand:
+        for file in files:
+            delta_y = find_delta_y(file)
+            text = file+' '+str(delta_y)+'\n'
+            fhand.write(text)
