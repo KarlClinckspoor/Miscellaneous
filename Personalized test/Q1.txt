@@ -1,0 +1,8 @@
+What is the volume of {} moles of {} at {}°C and {} atm?
+$ pV = nRT $
+$ R = 8.314 J / (mol. K) $
+###
+%n 0.1,1.0, 0.05
+%s ethane,propane,helium,xenon
+%n 0.0,150,30
+%n 0.1,1.0, 0.05

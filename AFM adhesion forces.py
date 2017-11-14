@@ -97,7 +97,7 @@ def find_delta_y(fname):
 
 # %%
 if __name__ == '__main__':
-    trim_files()
+    rewrite_files()
     files = glob.glob('*int.txt')
     with open('resultados.txt', 'w') as fhand:
         for file in files:
