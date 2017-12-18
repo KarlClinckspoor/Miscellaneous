@@ -1,0 +1,30 @@
+#### Generic Settings ####
+# Inline graphs is meant for those with IDEs like Spyder
+INLINE_GRAPHS = True
+# Debug prints messages for development
+DEBUG = False
+# Save graphs after fitting.
+SAVE_GRAPHS = True
+# Treat all files in folder?
+TREAT_ALL = False
+# Extension of files to look for
+EXT = txt
+
+#### Linear fitting ####
+# Perform linear fit?
+DO_LIN = True
+# Sorting method of the automatic linear method.
+# Can be 'by_error', minimizing the error, or 'by_error_length', which minimizes the error divided by the total number of points used.
+SORTING_METHOD_LIN = by_error_length
+# Set to True if you want the linear fitting to be done automatically. False, if to be done manually.
+AUTO_LIN = True
+
+#### Non-Linear fitting ####
+# Perform non-linear fitting?
+DO_NL = True
+# Fitting method. 'Carreau', 'Cross', 'Carreau-Yasuda', 'all'
+NL_FITTING_METHOD = Carreau
+# Can be 'overall', minimizing the error of all parameters, or 'eta_0', minimizing the error of only this parameter.
+SORTING_METHOD_NL = overall
+# Set to True if you want the non linear fitting to be done automatically
+AUTO_NL = True
