@@ -3,34 +3,19 @@ import matplotlib.pyplot as plt
 import glob
 import numpy as np
 from scipy.optimize import curve_fit
+import logging
+import traceback
 
-# todo: criar um arquivo de configuração, e uma função para carregar as configurações.
-# Se não tiver o arquivo, fazer as diversas perguntas.
 # antes de começar, perguntar se quer analisar tudo usando as configurações anteriores.
 # todo: criar uma opção para gerar um arquivo xlsx separando em nome, horário, data e valores.
 # todo: sempre checar se o comprimento de GP e Eta são iguais e se só tem valores numéricos em ambos.
 # todo: usar um logging bom
 
-#######
-# Default settings:
-# Shows additional messages to help in debugging.
-# DEBUG = False
-# If what you're running Python on supports inline graphs, like iPython in Spyder does, set this to True. 
-# Otherwise, set this to False, so that you can use the program while the Graph is open.
-# SPYDER = False
-# Change the sorting method to either 'by_error' or 'by_error_length'
-# SORTING = 'by_error'
-# Change the fitting method to use 'Carreau', 'Cross', 'Power Law', 'Linear' or 'All' fit.
-# FITTING_METHOD = 'Carreau'
-# SORTING_METHOD_NON_LIN = 'overall'
-# SORTING_METHOD_LIN = 'by_error_length'
-# SAVE_GRAPHS = True
-########
 
 # default_settings
 settings = {
             'DEBUG': False,
-            'SPYDER': False,
+            'INLINE_GRAPHS': False,
             'SORTING_METHOD_LIN': 'by_error_length',  # by_error, by_error_length
             'NL_FITTING_METHOD': 'Carreau',  # Carreau, Cross, Carreau-Yasuda
             'SORTING_METHOD_NL': 'overall',  # eta_0, overall
@@ -43,6 +28,9 @@ settings = {
             'TREAT_ALL':False,
             'EXT':'txt'
             }
+
+valid_options_lin_sorting = ['by_error', 'by_error_length']
+valid_options_nl_sorting = ['eta_0', 'overall']
 models = ['Carreau', 'Cross', 'Carreau-Yasuda']
 Param_names_errs = {'Carreau':'eta_0 eta_inf GP_b n eta_0_err eta_inf_err GP_b_err n_err',
                     'Cross': 'eta_0 eta_inf GP_b n eta_0_err eta_inf_err GP_b_err n_err',
@@ -233,33 +221,98 @@ def ExtractData(fname, FC_segment=0):
 def record(name, eta0, eta0_err, silent = False, extra = '', fdest_name = 'results.csv'):
     """Writes to a .csv file the fitting results. Default name is results.csv"""
     if not silent:
-        print(name + ':', 'Intercept', eta0, '+-', eta0_err)
+        print(name + ':', 'Intercept', eta0, '+-', eta0_err, extra)
 
     with open(fdest_name, 'a', encoding = 'utf-8') as fdest:
         fdest.write(name + ';' + str(eta0) + ';' + str(eta0_err) + ';' + extra +'\n')
 
 
-# todo: complete this function. Change the default settings as needed.
+def save_settings():
+    global settings
+    with open('settings.dat', 'w') as settings_file:
+        settings_file.write('#This is an automatically created settings file.\n')
+
+        settings_file.write('\n# Inline graphs is meant for those with IDEs like Spyder\n')
+        settings_file.write('INLINE_GRAPHS=' + str(settings['INLINE_GRAPHS']))
+
+        settings_file.write('\n# Plot graphs after fitting, with error propagation? Slows down the process greatly.\n')
+        settings_file.write('PLOT_GRAPHS=' + str(settings['PLOT_GRAPHS']))
+
+        settings_file.write('\n# Save graphs after fitting? Useless if PLOT_GRAPHS is set to False\n')
+        settings_file.write('SAVE_GRAPHS=' + str(settings['SAVE_GRAPHS']))
+
+        settings_file.write('\n# Treat all files in folder?\n')
+        settings_file.write('TREAT_ALL=' + str(settings['TREAT_ALL']))
+
+        settings_file.write('\n# Extension of files to look for\n')
+        settings_file.write('EXT=' + str(settings['EXT']))
+
+        settings_file.write('\n\n#### Linear Fitting ####')
+
+        settings_file.write('\n# Perform linear fit?\n')
+        settings_file.write('DO_LIN=' + str(settings['DO_LIN']))
+
+        settings_file.write("\n# Sorting method of the automatic linear method.\n# Can be 'by_error', minimizing the " +
+                            "error, or 'by_error_length', which minimizes the error divided by the total number of " +
+                            "points used.\n")
+        settings_file.write('SORTING_METHOD_LIN=' + str(settings['SORTING_METHOD_LIN']))
+
+        settings_file.write('\n# Set to True if you want the linear fitting to be done automatically. ' +
+                            'False, if to be done manually.\n')
+        settings_file.write('AUTO_LIN=' + str(settings['AUTO_LIN']))
+
+        settings_file.write('\n\n#### Non-Linear Fitting ####')
+
+        settings_file.write('\n# Perform non-linear fitting?\n')
+        settings_file.write('DO_NL=' + str(settings['DO_NL']))
+
+        settings_file.write("\n# Fitting method. 'Carreau', 'Cross', 'Carreau-Yasuda'\n")
+        settings_file.write('NL_FITTING_METHOD=' + str(settings['NL_FITTING_METHOD']))
+
+        settings_file.write("\n# Can be 'overall', minimizing the error of all parameters, or 'eta_0', " +
+                            "minimizing the error of only this parameter.\n")
+        settings_file.write('SORTING_METHOD_NL=' + str(settings['SORTING_METHOD_NL']))
+
+        settings_file.write('\n# Set to True if you want the non linear fitting to be done automatically\n')
+        settings_file.write('AUTO_NL=' + str(settings['AUTO_NL']))
+
+        settings_file.write('\n\n##### Debug #####\n')
+        settings_file.write('# Show debug messages\n')
+        settings_file.write('DEBUG=' + str(settings['DEBUG']))
+
+
 def load_settings():
     global settings
     try:
         fhand = open('settings.dat', 'r')
-    except OSError:
-        print('Settings file not found. Loading defaults')
-              # If file not found, use default settings.
-              # todo: create a file settings.dat and place defaults.
+    except FileNotFoundError:
+        print('Settings file not found. Loading defaults.')
+        print('Creating a new settings file with the defaults')
+        save_settings()
+        return
+
+    if settings['DEBUG']:
+        print('===Builtin settings===')
+        for key, value in settings.items():
+            print(key, '=', value)
+        print('======================')
 
     for line in fhand:
         if line.startswith('#'):
             continue
-        if len(line) == 0:
+        if len(line) < 4:
             continue
         line = line.rstrip()
         line = line.replace(' ', '')
+        #print(line, len(line))
         var, value = line.split('=')
-        if settings['DEBUG']:
+        if var not in settings:
+            if settings['DEBUG']:
+                print("Settings file has an unrecognized parameter", var, "which wasn't loaded")
+            continue
+        if settings['DEBUG']:  # checks if the default settings in the source code has the Debug enabled
             print(line)
-            print('Var, val = ', var, value)
+            print('Var =', var, 'val =', value)
         if value.lower() == 'true':
             settings[var] = True
         elif value.lower() == 'false':
@@ -267,59 +320,83 @@ def load_settings():
         else:
             settings[var] = value
     fhand.close()
+
+    if settings['DEBUG']:
+        print('===Current settings===')
+        for key, value in settings.items():
+            print(key, '=', value)
+        print('======================')
     return 
 
-def load_settings2():
-    global settings
-    temp = {}
-    try:
-        sett_file = open('settings.dat', 'r').read()
-    except OSError:
-        print('Settings file not found. Loading defaults')
-    
-    lines = sett_file.split('\n')
-    for line in lines:
-        if line.startswith('#') or len(line) == 0:
-            continue
-        #print(line)
-        line = line.replace(" ", "")
-        #print(line)
-        var, value = line.split('=')
-        #print(var, value)
-        if value.lower() == 'true':
-            temp[var] = True
-        elif value.lower() == 'false':
-            temp[var] = False
-        else:
-            temp[var] = value
-        #print(temp)
-    settings = temp
-    return
-    
+
 def edit_settings():
     global settings
     counter = 0
+    valid_numbers = []
+    number_setting_corr = {}
     for key, value in settings.items():
-        print(counter, ')', key, ':', value)
+        print(counter, ')', key, '=', value, end='')
+        if type(value) == bool:
+            print(': Options= True | False')
+        if key == 'SORTING_METHOD_LIN':
+            print(': Options= ', end='')
+            print(*valid_options_lin_sorting, sep=' | ')
+        if key == 'NL_FITTING_METHOD':
+            print(': Options= ', end='')
+            print(*models, sep=' | ')
+        if key == 'SORTING_METHOD_NL':
+            print(': Options= ', end='')
+            print(*valid_options_nl_sorting, sep=' | ')
+        if key == 'EXT':
+            print(': Options= txt | dat | csv')
+        valid_numbers.append(str(counter))
+        number_setting_corr[str(counter)] = key
         counter += 1
+    print('\n===================\n')
+    if settings['DEBUG']:
+        print('Valid numbers', valid_numbers)
+        print('Correlation', number_setting_corr)
     while True:
-        choice = input('Which setting you want to change? Enter number, new value to modify, or quit to exit. '
-                       'Example: 1,True\n')
+        print('Which setting you want to change? Enter "number, new value" to modify, or "quit" to exit.')
+        print('Observe the possible values for each setting! They are case sensitive. '
+              'Inputting wrong values might break the program. \n')
+        choice = input('Input:')
         if choice == 'quit':
             break
+        if ',' not in choice:
+            print('Invalid input. Place the number, followed by a comma, followed by its value')
+            continue
         if len(choice.split(',')) != 2:
-            print('Invalid input')
+            print('Invalid input, must have only one comma')
             continue
         var, val = choice.split(',')
-        if var not in settings.keys():
-            print('Invalid setting')
+        if var not in valid_numbers:
+            print('Invalid number.')
             continue
+        real_var = number_setting_corr[var]
         if val.lower() == 'true':
-            settings[var] = True
+            settings[real_var] = True
+            continue
         elif val.lower() == 'false':
-            settings[var] = False
+            settings[real_var] = False
+            continue
         else:
-            settings[var] = val
+            settings[real_var] = val
+        # todo: check for all possible values to avoid inputting wrong settings and messing everything up.
+        # if val not in valid_options_nl_sorting:
+        #     print('Invalid nonlinear sorting option. Case sensitive! Be very precise.')
+        #     continue
+        # if val not in valid_options_lin_sorting:
+        #     print('Invalid linear sorting option. Case sensitive! Be very precise.')
+        #     continue
+        # if val not in models:
+        #     print('Invalid nonlinear fitting model. Case sensitive! Be very precise.')
+        #     continue
+
+    print('===Final settings===')
+    print(*[key + '=' + str(value) + '\n' for key, value in settings.items()], sep='')
+    print('====================')
+    save_settings()
     return
 
 
@@ -332,11 +409,12 @@ def select_files():
     files = []
     extension = input('What is the file extension? txt, dat, etc:\n')
     allfiles = glob.glob('*.' + extension)
-    for num, file in enumerate(allfiles):
-        print(num, file)
+    print(*[str(num) + ')' + file + '\n' for num, file in enumerate(allfiles)], sep='')
     while True:
-        file_to_add = input('Which file to add? number or "quit" to exit')
+        file_to_add = input('Which file to add? Number, nothing to continue or "quit" to exit: ')
         if file_to_add == 'quit':
+            return []
+        elif file_to_add == '':
             break
         else:
             try:
@@ -345,6 +423,13 @@ def select_files():
                 print('Invalid value')
             except ValueError:
                 print('Enter a number, not text')
+    if len(files) == 0:
+        print('No file was selected! The program will now quit.')
+        return files
+    print('====Selected files:====')
+    print(*[file + '\n' for file in files], sep='', end='')
+    print('=======================')
+    return files
 
 # -----------Plotting-------------------------
 def PlotData(GP, Eta):
@@ -359,16 +444,16 @@ def PlotData(GP, Eta):
     for i in range(0, len(GP)):
         plt.annotate(str(i), (GP[i], Eta[i]))
     
-    if not settings['SPYDER']:
+    if not settings['INLINE_GRAPHS']:
         plt.draw()
         plt.pause(0.001)
     
-    if settings['SPYDER']:
+    if settings['INLINE_GRAPHS']:
         plt.show()
     return None
 
 
-def plot_error_graphs(file, GP, Eta, params=[], model = '', first_point=0, last_point=-1, do_save=True, param_names=''):
+def plot_error_graphs(file, GP, Eta, params=[], model = '', first_point=0, last_point=-1, param_names=''):
     """"Plot fitted model with errorbars, overlaying the data.
     file is the file name only, not the file handle.
     GP, Eta are the extracted data files
@@ -376,7 +461,6 @@ def plot_error_graphs(file, GP, Eta, params=[], model = '', first_point=0, last_
     params are the fitting parameters, arranged in the following way:
     [par1, par2, par3, par1_err, par2_err, par3_err]
     first and last points are the points used for fitting, must be integers
-    do_save selects if one wants to save the graph, boolean
     param_names contains the parameter names, so that they can be included in the graph"""
     TEXT_FILENAME_X = 0.1
     TEXT_PARAMS_X = 0.3
@@ -397,7 +481,7 @@ def plot_error_graphs(file, GP, Eta, params=[], model = '', first_point=0, last_
         y, yerr = np.ones(len(x)) * params[0], np.ones(len(x)) * params[1]  # todo: check if this is right
     # todo: add powerlaw model.
 
-    if not settings['SPYDER']:
+    if not settings['INLINE_GRAPHS']:
         plt.clf()
 
     plt.xscale('log')
@@ -429,21 +513,21 @@ def plot_error_graphs(file, GP, Eta, params=[], model = '', first_point=0, last_
     plt.figtext(TEXT_FILENAME_X, TEXT_Y - 0.060, param_values, size='small')
     plt.figtext(TEXT_FILENAME_X, TEXT_Y - 0.090, param_errors, size='small')
 
-    if do_save:
+    if settings['SAVE_GRAPHS']:
         plt.savefig(file[:-4] + '.png')
         print('Figure saved.')
-    if not settings['SPYDER']:
+    if not settings['INLINE_GRAPHS']:
         plt.draw()
         plt.pause(0.5)
         plt.clf()
-    if settings['SPYDER']:
+    if settings['INLINE_GRAPHS']:
         plt.show()
     return
 
 
 # todo: make this generic so that it can accept all fitting methods.
-def plot_fitted_data(file, GP, Eta, a, aerr, p1, p2, method='', do_save=True):
-    """Plots the fitted data so that one can evaluate how good is the fit."""
+def plot_fitted_data(file, GP, Eta, a, aerr, p1, p2, method=''):
+    """Plots the fitted data so that one can evaluate how good the fit is."""
     TEXT_X = 0.6
     TEXT_Y = 1.0
     if settings['DEBUG']:
@@ -456,7 +540,7 @@ def plot_fitted_data(file, GP, Eta, a, aerr, p1, p2, method='', do_save=True):
         print('Debug: y', y)
     yerr = np.ones(len(x)) * aerr
 
-    if not settings['SPYDER']:
+    if not settings['INLINE_GRAPHS']:
         plt.clf()
 
     plt.xscale('log')
@@ -472,14 +556,14 @@ def plot_fitted_data(file, GP, Eta, a, aerr, p1, p2, method='', do_save=True):
     plt.figtext(TEXT_X, TEXT_Y - 0.05, 'a = ' + str(a), color='red')
     plt.figtext(TEXT_X, TEXT_Y - 0.10, 'aerr = ' + str(aerr), color='red')
 
-    if do_save:
+    if settings['SAVE_GRAPHS']:
         plt.savefig(file[:-4] + '.png')
         print('Figure saved.')
-    if not settings['SPYDER']:
+    if not settings['INLINE_GRAPHS']:
         plt.draw()
         plt.pause(0.5)
         plt.clf()
-    if settings['SPYDER']:
+    if settings['INLINE_GRAPHS']:
         plt.show()
     return
 
@@ -761,41 +845,103 @@ def main_old():
 def main():
     global settings
     load_settings()
+    print('====Current settings:====')
+    print(*[key + '=' + str(value) + '\n' for key, value in settings.items()], sep='', end='')
+    print('=========================')
     do_change = input('Do you want to change the settings? y/[n]')
     if do_change == 'y':
         edit_settings()
 
     if settings['TREAT_ALL']:
         files = glob.glob('*.' + settings['EXT'])
-        # todo: check if no files are found
+        if len(files) == 0:
+            print('No files with the extension', settings['EXT'], 'found. Please select them manually or change the '
+                  'extension accordingly.')
+            select_files()
+
     else:
         files = select_files()
 
+    if len(files) == 0:  # If no files were selected, even manually.
+        return
+
     for file in files:
-        GP, Eta = ExtractData(file)
-        GP = np.array(GP)
-        Eta = np.array(Eta)
-        if settings['DO_LIN']:
-            if settings['AUTO_LIN']:
-                lin_points, a, aerr = automatic_linear_Fitting(GP, Eta, sorting = settings['SORTING_METHOD_LIN'])
-            else:
-                lin_points, a, aerr = ManualDataFit(file, model='Linear')
+        try:
+            GP, Eta = ExtractData(file)
+            GP, Eta = np.array(GP), np.array(Eta)
+        except ValueError:
+            print('!!!! No Flow Curve data was found! Re-export the data on file', file, 'Skipping.')
+            with open('log', 'a') as log:
+                log.write('No data found in file ' + file + '\n')
+            continue
+        if len(GP) != len(Eta):
+            print('!!!! GP and Eta have different lengths! Re-export', file, 'or fix the problem manually.')
+            print('!!!! Skipping file', file)
+            with open('log', 'a') as log:
+                log.write('GP and Eta of different lengths on file ' + file + '\n')
+            continue
 
-            plot_error_graphs(file, GP, Eta, params=np.concatenate((a,aerr)), first_point=lin_points[0],
-                              last_point=lin_points[1], model = 'Linear', param_names='eta_0 eta_0_err')
-            record(file, a, aerr, extra='linear automatic;FP='+ str(lin_points[0])+ 'LP='+ str(lin_points[1]))
+        np.seterr(over='raise') # Makes Overflow errors appear as exceptions, not only as warnings.
+        try:
+            if settings['DO_LIN']:
+                lin_has_error = ''
+                try:
+                    if settings['AUTO_LIN']:
+                        lin_points, a, aerr = automatic_linear_Fitting(GP, Eta, sorting = settings['SORTING_METHOD_LIN'])
+                    else:
+                        lin_points, a, aerr = ManualDataFit(file, model='Linear')
+                except: # todo: debug here and try to find the types of exception that can occur
+                    print('!!!!We have encountered an error while processing file', file)
+                    print(traceback.format_exc())
 
-        if settings['DO_NL']:
-            if settings['AUTO_NL']:
-                nl_first, popt, perr = nonlinear_model_auto_fitting(GP, Eta, method=settings['NL_FITTING_METHOD'])
-                nl_points = (nl_first, -1)
-            else:
-                nl_points, popt, perr = ManualDataFit(file, model=settings['NL_FITTING_METHOD'])
+                try:
+                    if settings['PLOT_GRAPHS']:
+                        plot_error_graphs(file[:-4] + '_lin_' + file[-4:], GP, Eta, params=np.array([a,aerr]),
+                                          first_point=lin_points[0], last_point=lin_points[1], model = 'Linear',
+                                          param_names='eta_0 eta_0_err')
+                except:
+                    print('Error found while plotting the linear fit')
+                    print(traceback.format_exc())
+                    lin_has_error = 'error_during_fitting'
+                record(file, a, aerr, extra='linear automatic;FP=' + str(lin_points[0]) + 'LP=' + str(lin_points[1]) +
+                                            lin_has_error, fdest_name='linear.csv')
 
-            plot_error_graphs(file, GP, Eta, params=np.concatenate((popt, perr)), first_point=nl_points[0],
-                              last_point=nl_points[1], model = settings['NL_FITTING_METHOD'],
-                              param_names=Param_names_errs[settings['NL_FITTING_METHOD']])
-            record(file, popt[0], perr[0], extra= 'nonlinear auto ' + settings['NL_FITTING_METHOD'])
+            if settings['DO_NL']:
+                try:
+                    nonlinear_has_error = ''
+                    if settings['AUTO_NL']:
+                        nl_first, popt, perr = nonlinear_model_auto_fitting(GP, Eta, method=settings['NL_FITTING_METHOD'])
+                        #nl_points = (nl_first, -1)
+                    else:
+                        nl_points, popt, perr = ManualDataFit(file, model=settings['NL_FITTING_METHOD'])
+                except FloatingPointError:
+                    print('!!!! Overflow detected on one of the parameters. Could not determine all parameters')
+                    nonlinear_has_error = ';param_overflow_during_fitting'
+                    with open('log', 'a') as log:
+                        log.write('Parameter overflow while trying to fit file ' + file + '\n')
+                try:
+                    if settings['PLOT_GRAPHS']:
+                        plot_error_graphs(file[:-4]+'_carr_'+file[-4:], GP, Eta, params=np.concatenate((popt, perr)),
+                                          first_point=nl_first, model=settings['NL_FITTING_METHOD'],
+                                  param_names=Param_names_errs[settings['NL_FITTING_METHOD']])
+                except OverflowError: # todo: write which parameter has overflown
+                    print('!!!! Overflow detected on one of the parameters. Could not plot the data')
+                    nonlinear_has_error = ';param_overflow_during_fitting'
+                try:
+                    record(file, popt[0], perr[0], extra= 'nonlinear_auto_' + settings['NL_FITTING_METHOD'] +
+                           nonlinear_has_error, fdest_name=settings['NL_FITTING_METHOD']+'.csv')
+                except UnboundLocalError:
+                    print('Not able to write to file because the subroutine did not return the fitting parameters')
+                    record(file, 0, 0, extra='nonlinear_auto_' + settings['NL_FITTING_METHOD'] + ';' +
+                                             'unable_to_find_viscosity', fdest_name=settings['NL_FITTING_METHOD']+'.csv')
+                    with open('log', 'a') as log:
+                        log.write('Unable to find viscosity for file ' + file + '\n')
+        except:
+            print('!!!!We have encountered an error while processing file', file)
+            print(traceback.format_exc())
+            with open('log', 'a') as log:
+                log.write('Error while processing ' + file + '\n')
+                log.write(traceback.format_exc())
 
 
 def main_simple():
@@ -811,17 +957,25 @@ def main_simple():
             with open('log', 'a') as log:
                 log.write('No data found in file ' + file + '\n')
             continue
+        if len(GP) != len(Eta):
+            print('!!!! GP and Eta have different lengths! Re-export the file or fix the problem manually.')
+            print('!!!! Skipping file', file)
+            with open('log', 'a') as log:
+                log.write('GP and Eta of different lengths on file ' + file + '\n')
+            continue
         try:
             # Fitting using the linear model
             lin_points, a, aerr = automatic_linear_Fitting(GP, Eta, sorting=settings['SORTING_METHOD_LIN'])
             try:
                 if settings['PLOT_GRAPHS']:
-                    plot_error_graphs(file[:-4]+'_lin_'+file[-4:], GP, Eta, params=np.array([a, aerr]), first_point=lin_points[0], last_point=lin_points[1],
-                              model='Linear', param_names='eta_0 eta_0_err')
+                    plot_error_graphs(file[:-4]+'_lin_'+file[-4:], GP, Eta, params=np.array([a, aerr]),
+                                      first_point=lin_points[0], last_point=lin_points[1], model='Linear',
+                                      param_names='eta_0 eta_0_err')
             except:
                 lin_has_error = 'error_during_fitting'
                 print('Error found while plotting the linear fit')
-            record(file, a, aerr, extra='linear automatic;FP=' + str(lin_points[0]) + 'LP=' + str(lin_points[1]) + lin_has_error,fdest_name='linear.csv')
+            record(file, a, aerr, extra='linear automatic;FP=' + str(lin_points[0]) + 'LP=' + str(lin_points[1]) +
+                   lin_has_error,fdest_name='linear.csv')
             # Fitting using the nonlinear model
             np.seterr(over='raise') # Makes Overflow errors appear as exception, not only as warnings.
             try:
@@ -833,7 +987,7 @@ def main_simple():
                 nonlinear_has_error = '_param_overflow_during_fitting'
                 with open('log', 'a') as log:
                     log.write('Parameter overflow while trying to fit file ' + file + '\n')
-            try:  # sometimes a parameter can't be fit and the progra
+            try:  # sometimes a parameter can't be fit and matplotlib gets confused.
                 if settings['PLOT_GRAPHS']:
                     plot_error_graphs(file[:-4]+'_carr_'+file[-4:], GP, Eta, params=np.concatenate((popt, perr)), first_point=nl_first,
                               model=settings['NL_FITTING_METHOD'],
@@ -846,30 +1000,22 @@ def main_simple():
                    fdest_name='carreau.csv')
             except UnboundLocalError:
                 print('Not able to write to file because the subroutine did not return the fitting parameters')
-                record(file, 0, 0, extra='nonlinear_auto_' + settings['NL_FITTING_METHOD'] + ';' + 'unable_to_find_viscosity', fdest_name='carreau.csv')
+                record(file, 0, 0, extra='nonlinear_auto_' + settings['NL_FITTING_METHOD'] + ';'
+                                         + 'unable_to_find_viscosity', fdest_name='carreau.csv')
                 with open('log', 'a') as log:
                     log.write('Unable to find viscosity for file ' + file + '\n')
+        except ValueError:
+            print('The imported file has different lengths of GP and Eta! Re-export the file or fix it manually.')
         except:
             print('!!!!We have encountered an error while processing file', file)
-            
-            import traceback
             print(traceback.format_exc())
-            
             with open('log', 'a') as log:
                 log.write('Error while processing ' + file + '\n')
-            if settings['DEBUG']:
-                file_txt = open(file).read()
-                print('DEBUG: File contents ======================= \n\n', file_txt)
-                print('=======DEBUG GP, Eta:\n', GP, '\n===\n', Eta)
-                print('=======DEBUG linear points, params', lin_points)
-                print(a, aerr)
-                print('=======DEBUG: nl points, params', nl_first)
-                print(popt, '\n====\n', perr)
-
-
+                log.write(traceback.format_exc())
 
 
 if __name__ == '__main__':
     if settings['DEBUG']:
         print(settings)
-    main_simple()
+    #main_simple()
+    main()
