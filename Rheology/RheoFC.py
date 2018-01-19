@@ -9,6 +9,7 @@ from scipy.optimize import curve_fit
 # antes de começar, perguntar se quer analisar tudo usando as configurações anteriores.
 # todo: criar uma opção para gerar um arquivo xlsx separando em nome, horário, data e valores.
 # todo: sempre checar se o comprimento de GP e Eta são iguais e se só tem valores numéricos em ambos.
+# todo: usar um logging bom
 
 #######
 # Default settings:
@@ -33,7 +34,8 @@ settings = {
             'SORTING_METHOD_LIN': 'by_error_length',  # by_error, by_error_length
             'NL_FITTING_METHOD': 'Carreau',  # Carreau, Cross, Carreau-Yasuda
             'SORTING_METHOD_NL': 'overall',  # eta_0, overall
-            'SAVE_GRAPHS': True,
+            'PLOT_GRAPHS': False,
+            'SAVE_GRAPHS': False,
             'AUTO_LIN': True,
             'AUTO_NL': True,
             'DO_LIN': True,
@@ -220,16 +222,16 @@ def ExtractData(fname, FC_segment=0):
     
     fhand.close()
     if len(GP) == 0:
-        print('No Flow Curve data was found! Re-export the data on file', fname)
-        quit()
+        #print('!!!!No Flow Curve data was found! Re-export the data on file', fname)
+        raise ValueError
     #return pd.Series(GP), pd.Series(Eta)
     if settings['DEBUG']:
         print('Debug: Extracted Data: GP:', GP, 'Eta:', Eta)
     return GP, Eta
 
 
-def record(name, eta0, eta0_err, silent = False, extra = '', fdest_name = 'results.dat'):
-    """Writes to a results.dat file the fitting results."""
+def record(name, eta0, eta0_err, silent = False, extra = '', fdest_name = 'results.csv'):
+    """Writes to a .csv file the fitting results. Default name is results.csv"""
     if not silent:
         print(name + ':', 'Intercept', eta0, '+-', eta0_err)
 
@@ -652,8 +654,9 @@ def nonlinear_model_auto_fitting(GP, Eta, method='Carreau', sorting='overall'):
     popt = [eta_0, eta_inf, GP_b, n]: the parameter values
     perr = [eta_0_err, eta_inf_err, GP_b_err, n_err]: the errors of the parameters
     """
+    FIRST_POINT_MAX = 0
     fittings = []
-    for first_point in range(0, 3, 1):
+    for first_point in range(0, FIRST_POINT_MAX + 1, 1):  # modified so that it does not check for the smallest error.
         GP_arr = np.array(GP[first_point:])
         Eta_arr = np.array(Eta[first_point:])
         if method == 'Carreau':
@@ -800,29 +803,60 @@ def main_simple():
     files = glob.glob('*.txt')
     for file in files:
         try:
+            lin_has_error = ''
             GP, Eta = ExtractData(file)
             GP, Eta = np.array(GP), np.array(Eta)
-
+        except ValueError:
+            print('----------No Flow Curve data was found! Re-export the data on file', file)
+            with open('log', 'a') as log:
+                log.write('No data found in file ' + file + '\n')
+            continue
+        try:
+            # Fitting using the linear model
             lin_points, a, aerr = automatic_linear_Fitting(GP, Eta, sorting=settings['SORTING_METHOD_LIN'])
             try:
-                plot_error_graphs(file[:-4]+'_lin_'+file[-4:], GP, Eta, params=np.array([a, aerr]), first_point=lin_points[0], last_point=lin_points[1],
+                if settings['PLOT_GRAPHS']:
+                    plot_error_graphs(file[:-4]+'_lin_'+file[-4:], GP, Eta, params=np.array([a, aerr]), first_point=lin_points[0], last_point=lin_points[1],
                               model='Linear', param_names='eta_0 eta_0_err')
-            except ValueError:
-                print(ValueError)
-            record(file, a, aerr, extra='linear automatic;FP=' + str(lin_points[0]) + 'LP=' + str(lin_points[1]),
-                   fdest_name='linear.dat')
-
-            nl_first, popt, perr = nonlinear_model_auto_fitting(GP, Eta, method=settings['NL_FITTING_METHOD'])
+            except:
+                lin_has_error = 'error_during_fitting'
+                print('Error found while plotting the linear fit')
+            record(file, a, aerr, extra='linear automatic;FP=' + str(lin_points[0]) + 'LP=' + str(lin_points[1]) + lin_has_error,fdest_name='linear.csv')
+            # Fitting using the nonlinear model
+            np.seterr(over='raise') # Makes Overflow errors appear as exception, not only as warnings.
             try:
-                plot_error_graphs(file[:-4]+'_carr_'+file[-4:], GP, Eta, params=np.concatenate((popt, perr)), first_point=nl_first,
+                nonlinear_has_error = ''
+                nl_first, popt, perr = nonlinear_model_auto_fitting(GP, Eta, method=settings['NL_FITTING_METHOD'])
+                #print('Debug: Carreau ', popt[0], perr[0])
+            except FloatingPointError:
+                print('------Overflow detected on one of the parameters. Could not determine all parameters')
+                nonlinear_has_error = '_param_overflow_during_fitting'
+                with open('log', 'a') as log:
+                    log.write('Parameter overflow while trying to fit file ' + file + '\n')
+            try:  # sometimes a parameter can't be fit and the progra
+                if settings['PLOT_GRAPHS']:
+                    plot_error_graphs(file[:-4]+'_carr_'+file[-4:], GP, Eta, params=np.concatenate((popt, perr)), first_point=nl_first,
                               model=settings['NL_FITTING_METHOD'],
                               param_names=Param_names_errs[settings['NL_FITTING_METHOD']])
-            except ValueError:
-                print(ValueError.__name__)
-            record(file, popt[0], perr[0], extra='nonlinear auto ' + settings['NL_FITTING_METHOD'],
-                   fdest_name='carreau.dat')
+            except OverflowError:
+                print('------Overflow detected on one of the parameters. Could not plot data')
+                nonlinear_has_error = '_param_overflow_during_fitting'
+            try:
+                record(file, popt[0], perr[0], extra='nonlinear_auto_' + settings['NL_FITTING_METHOD'] + nonlinear_has_error,
+                   fdest_name='carreau.csv')
+            except UnboundLocalError:
+                print('Not able to write to file because the subroutine did not return the fitting parameters')
+                record(file, 0, 0, extra='nonlinear_auto_' + settings['NL_FITTING_METHOD'] + ';' + 'unable_to_find_viscosity', fdest_name='carreau.csv')
+                with open('log', 'a') as log:
+                    log.write('Unable to find viscosity for file ' + file + '\n')
         except:
-            print('We have encountered an error in file', file)
+            print('!!!!We have encountered an error while processing file', file)
+            
+            import traceback
+            print(traceback.format_exc())
+            
+            with open('log', 'a') as log:
+                log.write('Error while processing ' + file + '\n')
             if settings['DEBUG']:
                 file_txt = open(file).read()
                 print('DEBUG: File contents ======================= \n\n', file_txt)
@@ -831,6 +865,7 @@ def main_simple():
                 print(a, aerr)
                 print('=======DEBUG: nl points, params', nl_first)
                 print(popt, '\n====\n', perr)
+
 
 
 
