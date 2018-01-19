@@ -3,6 +3,26 @@ Miscellaneous small projects I've been developing to make my data treatment life
 
 The scripts contained here are:
 
+## RheoFC.py
+
+### Short Description
+
+Script that reads plaintext data from a rheometer, extracts the flow curve from the data, fits models and extracts the zero-shear viscosity, which it then records to a .csv file. It can produce graphs showing the data and the requested model, and save them. The model includes error bars, propagated from the fitting parameters. 
+
+### Features
+
+4 Fitting models:
+* Linear extrapolation
+* Carreau
+* Cross
+* Carreau-Yasuda
+
+Customizability: An external settings file can be edited to tailor what you require the script to do. If this file is not present, the script generates it automatically. The settings can be edited in-script also.
+
+Outputs the zero-shear viscosity to .csv files that can later be PowerQueried into Excel.
+
+Data and model can be plotted automatically, and then saved as .png files, for quick checking.
+
 ## AFM adhesion forces.py
 
 This script reads plaintext force-distance data. First, it reads data that has the X values (distance) in the fourth column (separated by tabs), and y (the force) in the third column. It rewrites the files to a second format that is easier for independent plotting afterwards. Then, it finds the deltaY, related to the adhesive force.
@@ -15,19 +35,4 @@ A very simple script that can be easily adapted for other uses and saves a lot o
 
 Nigh useless scripts to calculate the Hamaker constant and an unfinished script to calculate electrostatic forces.
 
-## RheoFC.py
 
-A script that calculates the zero-shear viscosity of flow curves obtained from a rheometer automatically, and saves the figures of each plot and fit. The data is required to be in plaintext, and needs to be separated by ';'. This script was specifically written for the ASCII exports from the RheoWin software from Thermo Scientific (Haake). The data reading function is specific to this type of file. Two sample curves are included with the script for comparison.
-
-The fitting can be done automatically, or manually. Both are based on fitting an horizontal curve at low shear rates and getting the intercept as the value for the zero shear viscosity.
-
-For the manual fitting, it is recommended to use Spyder, or some ipython interpreter that supports inline plotting of graphs. Manual fitting requires you to input which points are going to be considered for the linear fit. It then saves a figure with the fit and saves the intercept + error value on a file named results.dat.
-
-Automatic fitting chooses two points and tries to fit them. It then varies the chosen points, compares the error from the fits and chooses the one with the smallest error.
-
-The points are chosen like this:
-* First point: Point 0 up to point length // 3 (// means floor division, to remove any decimal places)
-* Second point: necessarily 4 points to the right of the first (or else it would always fit two adjacent points), and goes to the right up to length // 2 (the middle of the curve).
-* The script goes through all the second points available before changing the first point.
-
-These parameters can easily be changed to better suit the data to be treated.
