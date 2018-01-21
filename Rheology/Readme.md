@@ -8,6 +8,25 @@ This is a script that calculates the zero-shear viscosity of flow curves obtaine
 
 The script can use matplotlib and the uncertainty package to plot the curves together with the data, and then save the plots for a quick way to check if the models are fitting the data well.
 
+# Installation
+
+1. Install python 3.6. Be sure to include python into the $PATH$ variable.
+2. Use pip to install the requirements. `pip install -r requirements.txt`
+3. Run the script using `python RheoFC.py`
+
+This script uses
+
+* `scipy` for model fitting
+* `matplotlib` for plotting data, if needed
+* `uncertainties` for error propagation
+* `numpy` for arrays and numerical calculations
+
+The following packages are included, but aren't necessarily used by the main script loop.
+* `pandas` for data reading and recording.
+* `sympy` for symbolically derivating the equations. The `uncertainties` takes care of error propagation, so it is unnecessary to write the propagation explicitly.
+ 
+
+
 # Workflow
 
 ## Settings
