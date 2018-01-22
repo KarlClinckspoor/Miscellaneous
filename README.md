@@ -3,26 +3,6 @@ Miscellaneous small projects I've been developing to make my data treatment life
 
 The scripts contained here are:
 
-## RheoFC.py
-
-### Short Description
-
-Script that reads plaintext data from a rheometer, extracts the flow curve from the data, fits models and extracts the zero-shear viscosity, which it then records to a .csv file. It can produce graphs showing the data and the requested model, and save them. The model includes error bars, propagated from the fitting parameters. 
-
-### Features
-
-4 Fitting models:
-* Linear extrapolation
-* Carreau
-* Cross
-* Carreau-Yasuda
-
-Customizability: An external settings file can be edited to tailor what you require the script to do. If this file is not present, the script generates it automatically. The settings can be edited in-script also.
-
-Outputs the zero-shear viscosity to .csv files that can later be PowerQueried into Excel.
-
-Data and model can be plotted automatically, and then saved as .png files, for quick checking.
-
 ## AFM adhesion forces.py
 
 This script reads plaintext force-distance data. First, it reads data that has the X values (distance) in the fourth column (separated by tabs), and y (the force) in the third column. It rewrites the files to a second format that is easier for independent plotting afterwards. Then, it finds the deltaY, related to the adhesive force.
